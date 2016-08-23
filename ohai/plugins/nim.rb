@@ -61,6 +61,7 @@ Ohai.plugin(:NIM) do
         shell_out("/usr/lpp/bos.sysmgt/nim/methods/c_rsh #{client_name} \"cat /etc/niminfo\"").stdout
 
       client_niminfo = niminfo_to_hash(client_niminfo)
+      client_niminfo.delete('name')
       clients[client_name] = client_niminfo
     end
     clients
@@ -71,6 +72,8 @@ Ohai.plugin(:NIM) do
     shell_out('/usr/sbin/lsnim -t lpp_source').stdout.each_line do |line|
       lpp_source = line.split[0]
       lpp_source_attributes = lpp_source_to_hash(shell_out("/usr/sbin/lsnim -l #{lpp_source}").stdout)
+      lpp_source_attributes.delete('class')
+      lpp_source_attributes.delete('type')
       lpp_sources[lpp_source] = lpp_source_attributes
     end
 
@@ -83,7 +86,7 @@ Ohai.plugin(:NIM) do
       if line =~ /^\s+/ then
         line.strip!
         key, value = line.split(/=/)
-        lpp_source_attributes[key] = value
+        lpp_source_attributes[key.strip] = value.strip
       end
     end
     lpp_source_attributes
