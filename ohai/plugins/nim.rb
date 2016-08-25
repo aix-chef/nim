@@ -141,17 +141,17 @@ Ohai.plugin(:NIM) do
         clients[client_name] = client_niminfo
 
       rescue Ohai::Exceptions::Exec => e
+        clients[client_name] = {}
         if e.message.end_with? "returned 2" then
-          puts "Timed out"
+          $stderr.puts "#{client_name} timed out"
         else
-          puts e.message
+          $stderr.puts "#{client_name}: #{e.message}"
         end
 
-        clients[client_name] = {}
       rescue Exception => e
-        puts "Exception: #{e.class.name}"
-        puts e.message
         clients[client_name] = {}
+        $stderr.puts "#{client_name} exception: #{e.class.name}"
+        puts e.message
       end
     end
 
@@ -227,7 +227,6 @@ Ohai.plugin(:NIM) do
     shell_out('/usr/sbin/lsnim -t spot').stdout.each_line do |line|
       spot = line.split.first
       spot_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{spot}").stdout)
-
       purge_superfluous_attributes(spot_attributes)
       spots[spot] = spot_attributes
     end
