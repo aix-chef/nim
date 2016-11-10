@@ -35,9 +35,13 @@ Ohai.plugin(:NIM) do
   #         and all known lpp_sources
   #
   def parse_niminfo(niminfo_file = '/etc/niminfo')
-    niminfo = File.open(niminfo_file) do |niminfo|
+    niminfo = Hash.new
+    niminfo_hash = File.open(niminfo_file) do |niminfo|
       niminfo_to_hash(niminfo)
     end
+    niminfo['master'] = niminfo_hash
+    oslevel = shell_out("/usr/bin/oslevel -s").stdout.chomp
+    niminfo['master']['oslevel'] = oslevel
 
     if is_master? niminfo then
       niminfo['clients'] = clients
@@ -105,7 +109,7 @@ Ohai.plugin(:NIM) do
   #   Boolean: True if on nim master, otherwise false
   #
   def is_master?(nim)
-    nim['configuration'] == 'master'
+    nim['master']['configuration'] == 'master'
   end
 
 
@@ -127,37 +131,40 @@ Ohai.plugin(:NIM) do
   def clients
     c_rsh = "/usr/lpp/bos.sysmgt/nim/methods/c_rsh"
     clients = Hash.new
+    threads = []
     client_list = shell_out('/usr/sbin/lsnim -t standalone').stdout
     client_list.each_line do |line|
-      client_name = line.split.first
+      threads.push(Thread.new do
+        client_name = line.split.first
 
-      begin
-        cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\" ", timeout: 3)
-        client_niminfo = cmd_rc.stdout
-        client_niminfo = niminfo_to_hash(client_niminfo)
-        oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\" ", timeout: 30).stdout.chomp
-        client_niminfo['oslevel'] = oslevel
-        client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
-        purge_superfluous_attributes(client_attributes)
-        client_niminfo['lsnim'] = client_attributes
-        client_niminfo.delete('name')
-        clients[client_name] = client_niminfo
+        begin
+          cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\" ", timeout: 30)
+          client_niminfo = cmd_rc.stdout
+          client_niminfo = niminfo_to_hash(client_niminfo)
+          oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\" ", timeout: 30).stdout.chomp
+          client_niminfo['oslevel'] = oslevel
+          client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
+          purge_superfluous_attributes(client_attributes)
+          client_niminfo['lsnim'] = client_attributes
+          client_niminfo.delete('name')
+          clients[client_name] = client_niminfo
 
-      rescue Ohai::Exceptions::Exec => e
-        clients[client_name] = {}
-        if e.message.end_with? "returned 2" then
-          $stderr.puts "#{client_name} timed out"
-        else
-          $stderr.puts "#{client_name}: #{e.message}"
+        rescue Ohai::Exceptions::Exec => e
+          clients[client_name] = {}
+          if e.message.end_with? "returned 2" then
+            $stderr.puts "#{client_name} timed out"
+          else
+            $stderr.puts "#{client_name}: #{e.message}"
+          end
+
+        rescue Exception => e
+          clients[client_name] = {}
+          $stderr.puts "#{client_name} exception: #{e.class.name}"
+          puts e.message
         end
-
-      rescue Exception => e
-        clients[client_name] = {}
-        $stderr.puts "#{client_name} exception: #{e.class.name}"
-        puts e.message
-      end
+      end)
     end
-
+    threads.each { |thr| thr.join }
     clients=Hash[clients.sort]
     clients
   end
@@ -175,14 +182,16 @@ Ohai.plugin(:NIM) do
   #
   def lpp_sources
     lpp_sources = Hash.new()
+    threads = []
     shell_out('/usr/sbin/lsnim -t lpp_source').stdout.each_line do |line|
-      lpp_source = line.split.first
-      lpp_source_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{lpp_source}").stdout)
-
-      purge_superfluous_attributes(lpp_source_attributes)
-      lpp_sources[lpp_source] = lpp_source_attributes
+      threads.push(Thread.new do
+        lpp_source = line.split.first
+        lpp_source_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{lpp_source}").stdout)
+        purge_superfluous_attributes(lpp_source_attributes)
+        lpp_sources[lpp_source] = lpp_source_attributes
+      end)
     end
-
+    threads.each { |thr| thr.join }
     lpp_sources
   end
 
@@ -228,13 +237,16 @@ Ohai.plugin(:NIM) do
   #
   def spots
     spots = Hash.new()
+    threads = []
     shell_out('/usr/sbin/lsnim -t spot').stdout.each_line do |line|
-      spot = line.split.first
-      spot_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{spot}").stdout)
-      purge_superfluous_attributes(spot_attributes)
-      spots[spot] = spot_attributes
+      threads.push(Thread.new do
+        spot = line.split.first
+        spot_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{spot}").stdout)
+        purge_superfluous_attributes(spot_attributes)
+        spots[spot] = spot_attributes
+      end)
     end
-
+    threads.each { |thr| thr.join }
     spots
   end
 
