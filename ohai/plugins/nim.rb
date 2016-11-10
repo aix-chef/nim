@@ -135,8 +135,11 @@ Ohai.plugin(:NIM) do
         cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\" ", timeout: 3)
         client_niminfo = cmd_rc.stdout
         client_niminfo = niminfo_to_hash(client_niminfo)
-        oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\" ", timeout: 10).stdout.chomp
+        oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\" ", timeout: 30).stdout.chomp
         client_niminfo['oslevel'] = oslevel
+        client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
+        purge_superfluous_attributes(client_attributes)
+        client_niminfo['lsnim'] = client_attributes
         client_niminfo.delete('name')
         clients[client_name] = client_niminfo
 
@@ -155,6 +158,7 @@ Ohai.plugin(:NIM) do
       end
     end
 
+    clients=Hash[clients.sort]
     clients
   end
 
@@ -198,7 +202,7 @@ Ohai.plugin(:NIM) do
     nim_atrr_string.each_line do |line|
       if line.start_with?(' ') then
         key, value = line.split(/=/)
-        nim_attributes[key.strip] = value.strip
+        nim_attributes[key.to_s.strip] = value.to_s.strip
       end
     end
 
