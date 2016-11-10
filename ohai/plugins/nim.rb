@@ -19,7 +19,7 @@ Ohai.plugin(:NIM) do
   provides "nim"
 
   # parse_niminfo
-
+  #
   # Parses a ‘niminfo’ file, transforming the key-value pairs into a hash
   # If run on a nim master it will also parse the niminfo file on each client
   # and provide details of known lpp_sources
@@ -48,13 +48,11 @@ Ohai.plugin(:NIM) do
       niminfo['lpp_sources'] = lpp_sources
       niminfo['spots'] = spots
     end
-
     niminfo
   end
 
-
   # niminfo_to_hash
-
+  #
   # Parses a ‘niminfo’ stream/string, transforming the key-value pairs into a hash
   # Each (non-comment) line has the following format
   # export NIM_NAME=host
@@ -70,7 +68,6 @@ Ohai.plugin(:NIM) do
   #   Hash: Key/Value pairs for each nim attribute defined in the niminfo file
   #
   def niminfo_to_hash(niminfo_stream)
-
     nim_hash = Hash.new
 
     niminfo_stream.each_line do |line|
@@ -92,12 +89,11 @@ Ohai.plugin(:NIM) do
         nim_hash[key] = value
       end
     end
-
     nim_hash
   end
 
   # is_master?
-
+  #
   # Determines if the niminfo configuration is for a master or not
   #
   #
@@ -112,11 +108,8 @@ Ohai.plugin(:NIM) do
     nim['master']['configuration'] == 'master'
   end
 
-
-
-
   # clients
-
+  #
   # Determines if the niminfo configuration and oslevel for all the clients of a nim master
   #
   # Note: The oslevel command adds considerably to the execution time of the ohai plugin.
@@ -136,17 +129,15 @@ Ohai.plugin(:NIM) do
     client_list.each_line do |line|
       threads.push(Thread.new do
         client_name = line.split.first
-
         begin
-          cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\" ", timeout: 30)
-          client_niminfo = cmd_rc.stdout
-          client_niminfo = niminfo_to_hash(client_niminfo)
-          oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\" ", timeout: 30).stdout.chomp
+          cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\"", timeout: 30).stdout
+          client_niminfo = niminfo_to_hash(cmd_rc)
+          oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\"", timeout: 30).stdout.chomp
           client_niminfo['oslevel'] = oslevel
           client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
           purge_superfluous_attributes(client_attributes)
           client_niminfo['lsnim'] = client_attributes
-          client_niminfo.delete('name')
+
           clients[client_name] = client_niminfo
 
         rescue Ohai::Exceptions::Exec => e
@@ -206,7 +197,6 @@ Ohai.plugin(:NIM) do
   #   Hash:: nim attribute hash
   #
   def nim_attr_string_to_hash(nim_atrr_string)
-
     nim_attributes = Hash.new
     nim_atrr_string.each_line do |line|
       if line.start_with?(' ') then
@@ -214,12 +204,13 @@ Ohai.plugin(:NIM) do
         nim_attributes[key.to_s.strip] = value.to_s.strip
       end
     end
-
     nim_attributes
   end
 
+  # purge_superfluous_attributes
+  #
   def purge_superfluous_attributes(nim_hash)
-    %w(class type arch prev_state simages bos_license).each do |attr|
+    %w(class type arch prev_state simages bos_license name).each do |attr|
       nim_hash.delete attr
     end
   end
@@ -250,10 +241,6 @@ Ohai.plugin(:NIM) do
     spots
   end
 
-
-
-
-
   # collect_data
   #
   # Primary entry point to the ohai plugin.
@@ -267,12 +254,9 @@ Ohai.plugin(:NIM) do
   #
   collect_data(:aix) do
     nim Hash.new
-
     parse_niminfo.each_pair do |key, value|
       nim[key] = value
     end
-
     nim
   end
-
 end
