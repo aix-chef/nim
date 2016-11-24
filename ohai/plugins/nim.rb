@@ -47,6 +47,7 @@ Ohai.plugin(:NIM) do
       niminfo['clients'] = clients
       niminfo['lpp_sources'] = lpp_sources
       niminfo['spots'] = spots
+      niminfo['vioses'] = vioses
     end
     niminfo
   end
@@ -74,43 +75,35 @@ Ohai.plugin(:NIM) do
   def clients
     c_rsh = "/usr/lpp/bos.sysmgt/nim/methods/c_rsh"
     threads = []
-	Thread.abort_on_exception = true
+    #Thread.abort_on_exception = true
     shell_out('/usr/sbin/lsnim -t standalone').stdout.each_line do |line|
       client_name = line.split.first
-      begin
-        threads.push(Thread.new do
-	      ret = {}
-		  cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\"", timeout: 30).stdout
+      threads.push(Thread.new do
+        begin
+          ret = {}
+          cmd_rc = shell_out("#{c_rsh} #{client_name} \"cat /etc/niminfo\"", timeout: 30).stdout
           ret[client_name] = niminfo_to_hash(cmd_rc)
-          ret
-        end)
-        threads.push(Thread.new do
-	      ret = {}
-		  oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\"", timeout: 30).stdout.chomp
-          ret[client_name] = { 'oslevel' => oslevel }
-          ret
-        end)
-        threads.push(Thread.new do
-	      ret = {}
-		  client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
+          oslevel = shell_out("#{c_rsh} #{client_name} \"/usr/bin/oslevel -s\"", timeout: 30).stdout.chomp
+          ret[client_name]['oslevel'] = oslevel
+          client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
           purge_superfluous_attributes(client_attributes)
-          ret[client_name] = { 'lsnim' => client_attributes }
-          ret
-        end)
-      rescue Ohai::Exceptions::Exec => e
-        if e.message.end_with? "returned 2" then
-          $stderr.puts "#{client_name} timed out"
-        else
-          $stderr.puts "#{client_name}: #{e.message}"
+          ret[client_name]['lsnim'] = client_attributes
+        rescue Ohai::Exceptions::Exec => e  
+          if e.message.end_with? "returned 2" then
+            $stderr.puts "#{client_name} timed out"
+          else
+            $stderr.puts "#{client_name}: #{e.message}"
+          end
+        rescue Exception => e
+          $stderr.puts "#{client_name} exception: #{e.class.name}"
+          puts e.message
         end
-      rescue Exception => e
-        $stderr.puts "#{client_name} exception: #{e.class.name}"
-        puts e.message
-      end
+        ret
+      end)
     end
     clients = {}
     threads.each { |thr| clients = clients.deep_merge(thr.value)}
-    clients
+    clients.sort_by { |k, v| k }.to_h
   end
 
   # lpp_sources
@@ -129,11 +122,11 @@ Ohai.plugin(:NIM) do
     shell_out('/usr/sbin/lsnim -t lpp_source').stdout.each_line do |line|
       threads.push(Thread.new do
         ret = {}
-		lpp_source = line.split.first
+        lpp_source = line.split.first
         lpp_source_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{lpp_source}").stdout)
         purge_superfluous_attributes(lpp_source_attributes)
         ret[lpp_source] = lpp_source_attributes
-		ret
+        ret
       end)
     end
     lpp_sources = {}
@@ -157,16 +150,44 @@ Ohai.plugin(:NIM) do
     shell_out('/usr/sbin/lsnim -t spot').stdout.each_line do |line|
       threads.push(Thread.new do
         ret = {}
-		spot = line.split.first
+        spot = line.split.first
         spot_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{spot}").stdout)
         purge_superfluous_attributes(spot_attributes)
         ret[spot] = spot_attributes
-		ret
+        ret
       end)
     end
     spots = {}
     threads.each { |thr| spots.merge!(thr.value) }
     spots
+  end
+
+  # vioses
+  #
+  # Identifies the VIOS's available to a nim master
+  #
+  # == Parameters:
+  #   none
+  #
+  # == Returns:
+  #   Hash of Hashes: Hash with nim vios resource name as key, with a hash of
+  #   attributes of each vios as the value
+  #
+  def vioses
+    threads = []
+    shell_out('/usr/sbin/lsnim -t vios').stdout.each_line do |line|
+      threads.push(Thread.new do
+        ret = {}
+        vios = line.split.first
+        vios_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{vios}").stdout)
+        purge_superfluous_attributes(vios_attributes)
+        ret[vios] = vios_attributes
+        ret
+      end)
+    end
+    vioses = {}
+    threads.each { |thr| vioses.merge!(thr.value) }
+    vioses
   end
 
   # niminfo_to_hash
