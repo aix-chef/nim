@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-Ohai.plugin(:NIM) do
+Ohai.plugin(:Nim) do
   provides 'nim'
 
   # parse_niminfo
@@ -253,10 +253,9 @@ Ohai.plugin(:NIM) do
   def nim_attr_string_to_hash(string)
     hash = {}
     string.each_line do |line|
-      if line.start_with?(' ')
-        key, value = line.split(/=/)
-        hash[key.to_s.strip] = value.to_s.strip
-      end
+      next unless line.start_with?(' ')
+      key, value = line.split('=')
+      hash[key.to_s.strip] = value.to_s.strip
     end
     hash
   end
@@ -281,10 +280,6 @@ Ohai.plugin(:NIM) do
   #   attributes of each client.
   #
   collect_data(:aix) do
-    nim {}
-    parse_niminfo.each_pair do |key, value|
-      nim[key] = value
-    end
-    nim
+    nim Hash[parse_niminfo]
   end
 end
