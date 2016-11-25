@@ -16,11 +16,11 @@
 # limitations under the License.
 
 Ohai.plugin(:NIM) do
-  provides "nim"
+  provides 'nim'
 
   # parse_niminfo
   #
-  # Parses a ‘niminfo’ file, transforming the key-value pairs into a hash
+  # Parses /etc/niminfo file, transforming the key-value pairs into a hash
   # If run on a nim master it will also parse the niminfo file on each client
   # and provide details of known lpp_sources
   #
@@ -36,14 +36,14 @@ Ohai.plugin(:NIM) do
   #
   def parse_niminfo(niminfo_file = '/etc/niminfo')
     niminfo = {}
-    niminfo_hash = File.open(niminfo_file) do |niminfo|
-      niminfo_to_hash(niminfo)
+    niminfo_hash = File.open(niminfo_file) do |info|
+      niminfo_to_hash(info)
     end
     niminfo['master'] = niminfo_hash
-    oslevel = shell_out("/usr/bin/oslevel -s").stdout.chomp
+    oslevel = shell_out('/usr/bin/oslevel -s').stdout.chomp
     niminfo['master']['oslevel'] = oslevel
 
-    if is_master? niminfo then
+    if master? niminfo
       niminfo['clients'] = clients
       niminfo['lpp_sources'] = lpp_sources
       niminfo['spots'] = spots
@@ -54,8 +54,8 @@ Ohai.plugin(:NIM) do
 
   class ::Hash
     def deep_merge(second)
-        merger = proc { |key, v1, v2| Hash === v1 && Hash === v2 ? v1.merge(v2, &merger) : v2 }
-        self.merge(second, &merger)
+      merger = proc { |_key, v1, v2| Hash == v1 && Hash == v2 ? v1.merge(v2, &merger) : v2 }
+      merge(second, &merger)
     end
   end
 
@@ -73,9 +73,8 @@ Ohai.plugin(:NIM) do
   #                   Also includes the oslevel
   #
   def clients
-    c_rsh = "/usr/lpp/bos.sysmgt/nim/methods/c_rsh"
+    c_rsh = '/usr/lpp/bos.sysmgt/nim/methods/c_rsh'
     threads = []
-    #Thread.abort_on_exception = true
     shell_out('/usr/sbin/lsnim -t standalone').stdout.each_line do |line|
       client_name = line.split.first
       threads.push(Thread.new do
@@ -88,22 +87,22 @@ Ohai.plugin(:NIM) do
           client_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{client_name}").stdout)
           purge_superfluous_attributes(client_attributes)
           ret[client_name]['lsnim'] = client_attributes
-        rescue Ohai::Exceptions::Exec => e  
-          if e.message.end_with? "returned 2" then
+        rescue Ohai::Exceptions::Exec => e
+          if e.message.end_with?('returned 2')
             $stderr.puts "#{client_name} timed out"
           else
             $stderr.puts "#{client_name}: #{e.message}"
           end
-        rescue Exception => e
-          $stderr.puts "#{client_name} exception: #{e.class.name}"
+        rescue StandardError => e
+          $stderr.puts "#{client_name} error: #{e.class.name}"
           puts e.message
         end
         ret
       end)
     end
     clients = {}
-    threads.each { |thr| clients = clients.deep_merge(thr.value)}
-    clients.sort_by { |k, v| k }.to_h
+    threads.each { |thr| clients = clients.deep_merge(thr.value) }
+    clients.sort_by { |k, _v| k }.to_h
   end
 
   # lpp_sources
@@ -192,7 +191,7 @@ Ohai.plugin(:NIM) do
 
   # niminfo_to_hash
   #
-  # Parses a ‘niminfo’ stream/string, transforming the key-value pairs into a hash
+  # Parses a /etc/niminfo stream/string, transforming the key-value pairs into a hash
   # Each (non-comment) line has the following format
   # export NIM_NAME=host
   # export NIM_HOSTNAME=fully.qualified.host.name
@@ -211,23 +210,21 @@ Ohai.plugin(:NIM) do
     string.each_line do |line|
       line.chomp!
       # parse the key and value, each side of the '='
-      if line =~ /^export\s+([[[:upper:]]_]+)=(.+)/ then
-        key, value = Regexp.last_match(1), Regexp.last_match(2)
-        # normalise the key & remove quotes from value
-        key.gsub!(/NIM_/, '')
-        key.downcase!
-        value.gsub!(/"/, '')
-        # Hosts, routes and mounts are space-separated lists
-        if key =~ /hosts|routes|mounts/ then
-          value = value.split
-        end
-        hash[key] = value
-      end
+      next unless line =~ /^export\s+([[[:upper:]]_]+)=(.+)/
+      key = Regexp.last_match(1)
+      value = Regexp.last_match(2)
+      # normalise the key & remove quotes from value
+      key.gsub!(/NIM_/, '')
+      key.downcase!
+      value.delete!('"')
+      # Hosts, routes and mounts are space-separated lists
+      value = value.split if key =~ /hosts|routes|mounts/
+      hash[key] = value
     end
     hash
   end
 
-  # is_master?
+  # master?
   #
   # Determines if the niminfo configuration is for a master or not
   #
@@ -239,7 +236,7 @@ Ohai.plugin(:NIM) do
   # == Returns:
   #   Boolean: True if on nim master, otherwise false
   #
-  def is_master?(nim)
+  def master?(nim)
     nim['master']['configuration'] == 'master'
   end
 
@@ -256,7 +253,7 @@ Ohai.plugin(:NIM) do
   def nim_attr_string_to_hash(string)
     hash = {}
     string.each_line do |line|
-      if line.start_with?(' ') then
+      if line.start_with?(' ')
         key, value = line.split(/=/)
         hash[key.to_s.strip] = value.to_s.strip
       end
@@ -284,7 +281,7 @@ Ohai.plugin(:NIM) do
   #   attributes of each client.
   #
   collect_data(:aix) do
-    nim Hash.new
+    nim {}
     parse_niminfo.each_pair do |key, value|
       nim[key] = value
     end
