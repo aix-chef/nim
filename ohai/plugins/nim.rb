@@ -45,9 +45,10 @@ Ohai.plugin(:Nim) do
 
     if master? niminfo
       niminfo['clients'] = clients
-      niminfo['lpp_sources'] = lpp_sources
-      niminfo['spots'] = spots
-      niminfo['vioses'] = vioses
+      niminfo['lpp_sources'] = collect_nim_resources('lpp_source')
+      niminfo['spots'] = collect_nim_resources('spot')
+      niminfo['mksysbs'] = collect_nim_resources('mksysb')
+      niminfo['vioses'] = collect_nim_resources('vios')
     end
     niminfo
   end
@@ -105,88 +106,32 @@ Ohai.plugin(:Nim) do
     clients.sort_by { |k, _v| k }.to_h
   end
 
-  # lpp_sources
+  # collect_nim_resources
   #
-  # Identifies the lpp_sources available to a nim master
-  #
-  # == Parameters:
-  #   none
-  #
-  # == Returns:
-  #   Hash of Hashes: Hash with nim lpp_source resource name as key, with a hash of
-  #   attributes of each lpp_source as the value
-  #
-  def lpp_sources
-    threads = []
-    shell_out('/usr/sbin/lsnim -t lpp_source').stdout.each_line do |line|
-      threads.push(Thread.new do
-        ret = {}
-        lpp_source = line.split.first
-        lpp_source_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{lpp_source}").stdout)
-        purge_superfluous_attributes(lpp_source_attributes)
-        ret[lpp_source] = lpp_source_attributes
-        ret
-      end)
-    end
-    lpp_sources = {}
-    threads.each { |thr| lpp_sources.merge!(thr.value) }
-    lpp_sources
-  end
-
-  # spots
-  #
-  # Identifies the spots available to a nim master
+  # Identifies the resources available to a nim master
   #
   # == Parameters:
   #   none
   #
   # == Returns:
-  #   Hash of Hashes: Hash with nim spot name as key, with a hash of
-  #   attributes of each spot as the value
+  #   Hash of Hashes: Hash with nim resource name as key, with a hash of
+  #   attributes of each resource as the value
   #
-  def spots
+  def collect_nim_resources(res_type)
     threads = []
-    shell_out('/usr/sbin/lsnim -t spot').stdout.each_line do |line|
+    shell_out("/usr/sbin/lsnim -t #{res_type}").stdout.each_line do |line|
       threads.push(Thread.new do
         ret = {}
-        spot = line.split.first
-        spot_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{spot}").stdout)
-        purge_superfluous_attributes(spot_attributes)
-        ret[spot] = spot_attributes
+        resource = line.split.first
+        resource_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{resource}").stdout)
+        purge_superfluous_attributes(resource_attributes)
+        ret[resource] = resource_attributes
         ret
       end)
     end
-    spots = {}
-    threads.each { |thr| spots.merge!(thr.value) }
-    spots
-  end
-
-  # vioses
-  #
-  # Identifies the VIOS's available to a nim master
-  #
-  # == Parameters:
-  #   none
-  #
-  # == Returns:
-  #   Hash of Hashes: Hash with nim vios resource name as key, with a hash of
-  #   attributes of each vios as the value
-  #
-  def vioses
-    threads = []
-    shell_out('/usr/sbin/lsnim -t vios').stdout.each_line do |line|
-      threads.push(Thread.new do
-        ret = {}
-        vios = line.split.first
-        vios_attributes = nim_attr_string_to_hash(shell_out("/usr/sbin/lsnim -l #{vios}").stdout)
-        purge_superfluous_attributes(vios_attributes)
-        ret[vios] = vios_attributes
-        ret
-      end)
-    end
-    vioses = {}
-    threads.each { |thr| vioses.merge!(thr.value) }
-    vioses
+    resources = {}
+    threads.each { |thr| resources.merge!(thr.value) }
+    resources
   end
 
   # niminfo_to_hash
